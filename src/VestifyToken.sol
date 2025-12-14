@@ -6,8 +6,8 @@ import {ERC20} from "@openzeppelin/token/ERC20/ERC20.sol";
 import {Ownable} from "@openzeppelin/access/Ownable.sol";
 
 /**
- * @title Vestify token
- * @notice ERC20 token with time-locked vesting support
+ * @title Vestify Token Contract
+ * @notice ERC20 token with time-locked vesting
  * @dev Inherits from open zeppelin's ERC20 contract
  */
 contract VestifyToken is ERC20, Ownable {

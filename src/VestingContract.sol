@@ -35,9 +35,11 @@ contract VestingContract is
 
     // State variables
     uint256 private vestifyTokenBalance;
+    uint256 private s_nextIndexToProcess;
+    uint256 private constant BATCH_SIZE = 10;
     uint256 private constant ONE_DAY_IN_SECONDS = 24 * 60 * 60;
-    VestingSchedule[] private s_vestingScheduleList;
 
+    VestingSchedule[] private s_vestingScheduleList;
     // Errors
     error VestingContract__AmountNotGreaterThanZero();
     error VestingContract__InvalidVestingPeriod();
@@ -59,7 +61,7 @@ contract VestingContract is
         uint256 cliffTimestamp,
         uint256 totalAmount
     ) external onlyOwner {
-        if (totalAmount <= 0)
+        if (totalAmount == 0)
             revert VestingContract__AmountNotGreaterThanZero();
 
         if (startTimestamp > cliffTimestamp || cliffTimestamp > endTimestamp)
@@ -96,65 +98,72 @@ contract VestingContract is
         cannotExecute
         returns (bool upkeepNeeded, bytes memory performData)
     {
+        uint256 count = 0;
+        uint256 startIndex = s_nextIndexToProces;
+        uint256 nextIndexToProcess;
         uint256[] memory idsToProcess = new uint256[](
             s_vestingScheduleList.length
         );
-        uint256 count = 0;
 
-        for (uint256 i = 0; i < s_vestingScheduleList.length; i++) {
-            VestingSchedule memory vestingSchedule = s_vestingScheduleList[i];
-
+        for (
+            uint256 i = startIndex;
+            i < s_vestingScheduleList.length && count < BATCH_SIZE;
+            i++
+        ) {
             bool shouldProcessSchedule = (block.timestamp -
-                vestingSchedule.lastTimestamp >
+                s_vestingScheduleList[i].lastTimestamp >
                 ONE_DAY_IN_SECONDS) &&
-                (vestingSchedule.releasedAmount <
-                    vestingSchedule.totalAmount) &&
-                (block.timestamp < vestingSchedule.endTimestamp);
+                (s_vestingScheduleList[i].releasedAmount <
+                    s_vestingScheduleList[i].totalAmount) &&
+                (block.timestamp < s_vestingScheduleList[i].endTimestamp);
 
             if (shouldProcessSchedule) {
                 idsToProcess[count] = i;
                 count = count + 1;
             }
+
+            if(count == BATCH_SIZE - 1){
+                nextIndexToProcess = i + 1;
+            }
+
+            //If we've run through all the schedules, reset to 0
+            if(i == s_vestingScheduleList.length - 1){
+                nextIndexToProcess = 0;
+            }
         }
 
-        //  resize array to match count, since we initialized to length of all vesting schedules
-        assembly {
-            mstore(idsToProcess, count)
+        if (count > 0) {
+            //  resize array to match count, since we initialized to length of all vesting schedules
+            assembly {
+                mstore(idsToProcess, count)
+            }
         }
 
         if (idsToProcess.length > 0) {
-            return (true, abi.encode(idsToProcess));
+            return (true, abi.encode(idsToProcess, nextIndexToProcess));
         } else {
             return (false, "");
         }
     }
 
     function performUpkeep(bytes calldata performData) external override {
-        uint256[] memory idsToProcess = abi.decode(performData, (uint256[]));
+        (uint256[] memory idsToProcess, uint256 nextIndexToProcess ) = abi.decode(performData, (uint256[], uint256));
+        s_nextIndexToProcess = nextIndexToProcess;
 
         for (uint256 i = 0; i < idsToProcess.length; i++) {
-            VestingSchedule
-                memory currentVestingSchedule = s_vestingScheduleList[
-                    idsToProcess[i]
-                ];
-
-            uint256 amountToRelease = currentVestingSchedule.amountPerDay;
+            uint256 amountToRelease = s_vestingScheduleList[idsToProcess[i]].amountPerDay;
 
             if (
-                currentVestingSchedule.releasedAmount + amountToRelease >
-                currentVestingSchedule.totalAmount
+                s_vestingScheduleList[idsToProcess[i]].releasedAmount + amountToRelease >
+                s_vestingScheduleList[idsToProcess[i]].totalAmount
             ) {
                 amountToRelease =
-                    currentVestingSchedule.totalAmount -
-                    currentVestingSchedule.releasedAmount;
+                    s_vestingScheduleList[idsToProcess[i]].totalAmount -
+                    s_vestingScheduleList[idsToProcess[i]].releasedAmount;
             }
 
-            currentVestingSchedule.releasedAmount =
-                currentVestingSchedule.releasedAmount +
-                amountToRelease;
-            currentVestingSchedule.lastTimestamp = block.timestamp;
-
-            s_vestingScheduleList[idsToProcess[i]] = currentVestingSchedule;
+            s_vestingScheduleList[idsToProcess[i]].releasedAmount += amountToRelease;
+            s_vestingScheduleList[idsToProcess[i]].lastTimestamp = block.timestamp;
         }
     }
 }

@@ -35,7 +35,7 @@ contract VestingContract is
 
     // State variables
     uint256 private vestifyTokenBalance;
-    uint256 constant ONE_DAY_IN_SECONDS = 24 * 60 * 60;
+    uint256 private constant ONE_DAY_IN_SECONDS = 24 * 60 * 60;
     VestingSchedule[] private s_vestingScheduleList;
 
     // Errors
@@ -104,10 +104,9 @@ contract VestingContract is
         for (uint256 i = 0; i < s_vestingScheduleList.length; i++) {
             VestingSchedule memory vestingSchedule = s_vestingScheduleList[i];
 
-            bool shouldProcessSchedule = (block.timestamp >=
-                vestingSchedule.cliffTimestamp) &&
-                (block.timestamp - vestingSchedule.lastTimestamp >
-                    ONE_DAY_IN_SECONDS) &&
+            bool shouldProcessSchedule = (block.timestamp -
+                vestingSchedule.lastTimestamp >
+                ONE_DAY_IN_SECONDS) &&
                 (vestingSchedule.releasedAmount <
                     vestingSchedule.totalAmount) &&
                 (block.timestamp < vestingSchedule.endTimestamp);
@@ -118,6 +117,7 @@ contract VestingContract is
             }
         }
 
+        //  resize array to match count, since we initialized to length of all vesting schedules
         assembly {
             mstore(idsToProcess, count)
         }
@@ -138,7 +138,7 @@ contract VestingContract is
                     idsToProcess[i]
                 ];
 
-            uint256 amountToRelease = currentVestingSchedule.releasedAmount;
+            uint256 amountToRelease = currentVestingSchedule.amountPerDay;
 
             if (
                 currentVestingSchedule.releasedAmount + amountToRelease >

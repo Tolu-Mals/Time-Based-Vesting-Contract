@@ -38,11 +38,14 @@ contract VestingContract is
     uint256 private s_nextIndexToProcess;
     uint256 private constant BATCH_SIZE = 10;
     uint256 private constant ONE_DAY_IN_SECONDS = 24 * 60 * 60;
-
+    mapping(address beneficiary => uint256 vestingScheduleIndex) private s_beneficiaryToVestingScheduleIndexPlusOne;
     VestingSchedule[] private s_vestingScheduleList;
+
     // Errors
     error VestingContract__AmountNotGreaterThanZero();
     error VestingContract__InvalidVestingPeriod();
+    error VestingContract__InsufficientFunds();
+    error VestingContract__BeneficiaryDoesNotExist();
 
     constructor() Ownable(msg.sender) {}
 
@@ -55,7 +58,7 @@ contract VestingContract is
      * @param totalAmount The total amount of tokens to be vested
      */
     function createVestingSchedule(
-        address beneficiaryAddress,
+        address beneficiary,
         uint256 startTimestamp,
         uint256 endTimestamp,
         uint256 cliffTimestamp,
@@ -74,7 +77,7 @@ contract VestingContract is
             ((endTimestamp - startTimestamp) / ONE_DAY_IN_SECONDS);
 
         VestingSchedule memory newVestingSchedule = VestingSchedule({
-            beneficiaryAddress: beneficiaryAddress,
+            beneficiaryAddress: beneficiary,
             startTimestamp: startTimestamp,
             endTimestamp: endTimestamp,
             cliffTimestamp: cliffTimestamp,
@@ -86,6 +89,7 @@ contract VestingContract is
         });
 
         s_vestingScheduleList.push(newVestingSchedule);
+        s_beneficiaryToVestingScheduleIndexPlusOne[beneficiary] = s_vestingScheduleList.length; //we index + 1 becuase default mapping value is 0
     }
 
     function checkUpkeep(
@@ -133,7 +137,7 @@ contract VestingContract is
         }
 
         if (count > 0) {
-            //  resize array to match count, since we initialized to length of all vesting schedules
+            //  resize array to match count to remvove empty spaces
             assembly {
                 mstore(idsToProcess, count)
             }
@@ -146,6 +150,7 @@ contract VestingContract is
         }
     }
 
+//TODO: The Docs mentioned something about any body being able to call performUpkeep, so we need to do some checks, in this case someone could change the value of s_nextIndexToProcess or idsToProcess, to get rewards faster
     function performUpkeep(bytes calldata performData) external override {
         (uint256[] memory idsToProcess, uint256 nextIndexToProcess ) = abi.decode(performData, (uint256[], uint256));
         s_nextIndexToProcess = nextIndexToProcess;
@@ -165,5 +170,25 @@ contract VestingContract is
             s_vestingScheduleList[idsToProcess[i]].releasedAmount += amountToRelease;
             s_vestingScheduleList[idsToProcess[i]].lastTimestamp = block.timestamp;
         }
+    }
+
+    function withdrawFunds(uint256 amount) external {
+        uint256 vestingScheduleIndexPlusOne = s_beneficiaryToVestingScheduleIndexPlusOne[msg.sender];
+
+        // 0 is an invalid index because we store index + 1
+        if(vestingScheduleIndexPlusOne == 0){
+            revert VestingContract__BeneficiaryDoesNotExist();                
+        }
+
+        uint256 amountAvailable = s_vestingScheduleList[vestingScheduleIndexPlusOne - 1].releasedAmount - s_vestingScheduleList[vestingScheduleIndexPlusOne - 1].withdrawnAmount;
+
+        if(amount > amountAvailable){
+            revert VestingContract__InsufficientFunds();
+        }
+
+        s_vestingScheduleList[vestingScheduleIndexPlusOne - 1].withdrawnAmount += amount;
+
+        // Transfer vestify tokens from this contract to beneficiary
+        IERC20(address(0)).transferFrom(address(this), msg.sender, amount);
     }
 }

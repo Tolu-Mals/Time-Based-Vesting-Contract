@@ -5,7 +5,7 @@ import {Script} from "forge-std/Script.sol";
 import {VestifyToken} from "src/VestifyToken.sol";
 
 contract DeployMyToken is Script {
-    uint16 private constant INITIAL_SUPPLY = 1000;
+    uint256 private constant INITIAL_SUPPLY = 1000e18;
     VestifyToken public vestifyToken;
 
     function run() public {

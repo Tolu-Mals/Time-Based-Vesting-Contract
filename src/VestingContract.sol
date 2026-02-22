@@ -112,13 +112,34 @@ contract VestingContract is
         cannotExecute
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        uint256 count = 0;
         uint256 startIndex = s_nextIndexToProcess;
         uint256 nextIndexToProcess;
-        uint256[] memory idsToProcess = new uint256[](
-            s_vestingScheduleList.length
-        );
+        uint256 idsToProcessCount = 0;
 
+        //Get count of ids that need to be processed
+        for (
+            uint256 i = startIndex;
+            i < s_vestingScheduleList.length && idsToProcessCount < BATCH_SIZE;
+            i++
+        ) {
+            bool shouldProcessSchedule = (block.timestamp -
+                s_vestingScheduleList[i].lastTimestamp >
+                ONE_DAY_IN_SECONDS) &&
+                (s_vestingScheduleList[i].releasedAmount <
+                    s_vestingScheduleList[i].totalAmount) &&
+                (block.timestamp < s_vestingScheduleList[i].endTimestamp);
+
+            if (shouldProcessSchedule) {
+                idsToProcessCount++;
+            }
+        }
+
+        uint256[] memory idsToProcess = new uint256[](idsToProcessCount);
+        uint256[] memory newReleasedAmounts = new uint256[](idsToProcessCount);
+        uint256 LAST_PROCESSED_TIMESTAMP = block.timestamp;
+        uint256 count = 0;
+
+        //Determine ids to process, and the new values for released amount and last time stamp
         for (
             uint256 i = startIndex;
             i < s_vestingScheduleList.length && count < BATCH_SIZE;
@@ -133,9 +154,24 @@ contract VestingContract is
 
             if (shouldProcessSchedule) {
                 idsToProcess[count] = i;
+                uint256 amountToRelease = s_vestingScheduleList[i].amountPerDay;
+
+                if (
+                    s_vestingScheduleList[i].releasedAmount + amountToRelease >
+                    s_vestingScheduleList[i].totalAmount
+                ) {
+                    amountToRelease =
+                        s_vestingScheduleList[i].totalAmount -
+                        s_vestingScheduleList[i].releasedAmount;
+                }
+                newReleasedAmounts[count] =
+                    s_vestingScheduleList[i].releasedAmount +
+                    amountToRelease;
+
                 count = count + 1;
             }
 
+            // If we've exceeded batch size, keep track of where to continue
             if (count == BATCH_SIZE - 1) {
                 nextIndexToProcess = i + 1;
             }
@@ -146,15 +182,16 @@ contract VestingContract is
             }
         }
 
-        if (count > 0) {
-            //  resize array to match count to remvove empty spaces
-            assembly {
-                mstore(idsToProcess, count)
-            }
-        }
-
         if (idsToProcess.length > 0) {
-            return (true, abi.encode(idsToProcess, nextIndexToProcess));
+            return (
+                true,
+                abi.encode(
+                    idsToProcess,
+                    newReleasedAmounts,
+                    nextIndexToProcess,
+                    LAST_PROCESSED_TIMESTAMP
+                )
+            );
         } else {
             return (false, "");
         }
@@ -162,29 +199,20 @@ contract VestingContract is
 
     //TODO: The Docs mentioned something about any body being able to call performUpkeep, so we need to do some checks, in this case someone could change the value of s_nextIndexToProcess or idsToProcess, to get rewards faster
     function performUpkeep(bytes calldata performData) external override {
-        (uint256[] memory idsToProcess, uint256 nextIndexToProcess) = abi
-            .decode(performData, (uint256[], uint256));
-        s_nextIndexToProcess = nextIndexToProcess;
+        (
+            uint256[] memory idsToProcess,
+            uint256[] memory newReleasedAmounts,
+            uint256 nextIndexToProcess,
+            uint256 lastProcessedTimestamp
+        ) = abi.decode(performData, (uint256[], uint256[], uint256, uint256));
 
         for (uint256 i = 0; i < idsToProcess.length; i++) {
-            uint256 amountToRelease = s_vestingScheduleList[idsToProcess[i]]
-                .amountPerDay;
-
-            if (
-                s_vestingScheduleList[idsToProcess[i]].releasedAmount +
-                    amountToRelease >
-                s_vestingScheduleList[idsToProcess[i]].totalAmount
-            ) {
-                amountToRelease =
-                    s_vestingScheduleList[idsToProcess[i]].totalAmount -
-                    s_vestingScheduleList[idsToProcess[i]].releasedAmount;
-            }
-
-            s_vestingScheduleList[idsToProcess[i]]
-                .releasedAmount += amountToRelease;
-            s_vestingScheduleList[idsToProcess[i]].lastTimestamp = block
-                .timestamp;
+            uint256 index = idsToProcess[i];
+            s_vestingScheduleList[index].releasedAmount = newReleasedAmounts[i];
+            s_vestingScheduleList[index].lastTimestamp = lastProcessedTimestamp;
         }
+
+        s_nextIndexToProcess = nextIndexToProcess;
     }
 
     function withdrawFunds(uint256 amount) external {

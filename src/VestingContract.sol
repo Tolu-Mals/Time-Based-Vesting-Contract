@@ -34,10 +34,11 @@ contract VestingContract is
     }
 
     // State variables
-    uint256 private vestifyTokenBalance;
+    uint256 private s_vestifyTokenBalance;
     uint256 private s_nextIndexToProcess;
     uint256 private constant BATCH_SIZE = 10;
     uint256 private constant ONE_DAY_IN_SECONDS = 24 * 60 * 60;
+    uint256 private constant MIN_VESTING_PERIOD = 7 * ONE_DAY_IN_SECONDS;
     mapping(address beneficiary => uint256 vestingScheduleIndex)
         private s_beneficiaryToVestingScheduleIndexPlusOne;
     VestingSchedule[] private s_vestingScheduleList;
@@ -73,11 +74,16 @@ contract VestingContract is
         if (totalAmount == 0)
             revert VestingContract__AmountNotGreaterThanZero();
 
-        if (startTimestamp > cliffTimestamp || cliffTimestamp > endTimestamp)
-            revert VestingContract__InvalidVestingPeriod();
+        if (
+            startTimestamp > cliffTimestamp ||
+            cliffTimestamp > endTimestamp ||
+            endTimestamp - startTimestamp < MIN_VESTING_PERIOD
+        ) revert VestingContract__InvalidVestingPeriod();
 
         // Transfer vestify tokens from caller to this contract
         IERC20(address(0)).transferFrom(msg.sender, address(this), totalAmount);
+
+        s_vestifyTokenBalance = s_vestifyTokenBalance + totalAmount;
 
         uint256 amountPerDay = totalAmount /
             ((endTimestamp - startTimestamp) / ONE_DAY_IN_SECONDS);
@@ -90,7 +96,7 @@ contract VestingContract is
             totalAmount: totalAmount,
             releasedAmount: 0,
             withdrawnAmount: 0,
-            lastTimestamp: block.timestamp,
+            lastTimestamp: startTimestamp,
             amountPerDay: amountPerDay
         });
 
@@ -145,6 +151,16 @@ contract VestingContract is
             i < s_vestingScheduleList.length && count < BATCH_SIZE;
             i++
         ) {
+            // If we've exceeded batch size, keep track of where to continue
+            if (count == BATCH_SIZE - 1) {
+                nextIndexToProcess = i + 1;
+            }
+
+            //If we've run through all the schedules, reset to 0
+            if (i == s_vestingScheduleList.length - 1) {
+                nextIndexToProcess = 0;
+            }
+
             bool shouldProcessSchedule = (block.timestamp -
                 s_vestingScheduleList[i].lastTimestamp >
                 ONE_DAY_IN_SECONDS) &&
@@ -168,17 +184,7 @@ contract VestingContract is
                     s_vestingScheduleList[i].releasedAmount +
                     amountToRelease;
 
-                count = count + 1;
-            }
-
-            // If we've exceeded batch size, keep track of where to continue
-            if (count == BATCH_SIZE - 1) {
-                nextIndexToProcess = i + 1;
-            }
-
-            //If we've run through all the schedules, reset to 0
-            if (i == s_vestingScheduleList.length - 1) {
-                nextIndexToProcess = 0;
+                count++;
             }
         }
 
@@ -241,8 +247,14 @@ contract VestingContract is
             .withdrawnAmount += amount;
 
         // Transfer vestify tokens from this contract to beneficiary
-        IERC20(address(0)).transferFrom(address(this), msg.sender, amount);
+        IERC20(address(0)).transfer(msg.sender, amount);
+
+        s_vestifyTokenBalance = s_vestifyTokenBalance - amount;
 
         emit WithdrawalCompleted(msg.sender);
+    }
+
+    function getVestifyTokenBalance() public view returns (uint256) {
+        return s_vestifyTokenBalance;
     }
 }

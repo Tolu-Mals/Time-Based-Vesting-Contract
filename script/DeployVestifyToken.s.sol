@@ -8,9 +8,13 @@ contract DeployMyToken is Script {
     uint256 private constant INITIAL_SUPPLY = 1000e18;
     VestifyToken public vestifyToken;
 
-    function run() public {
+    function run() public {}
+
+    function deployContaact() public returns (VestifyToken) {
         vm.startBroadcast();
         vestifyToken = new VestifyToken(INITIAL_SUPPLY);
         vm.stopBroadcast();
+
+        return vestifyToken;
     }
 }

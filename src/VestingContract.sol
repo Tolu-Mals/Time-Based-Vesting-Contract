@@ -34,6 +34,7 @@ contract VestingContract is
     }
 
     // State variables
+    address private s_tokenContract;
     uint256 private s_vestifyTokenBalance;
     uint256 private s_nextIndexToProcess;
     uint256 private constant BATCH_SIZE = 10;
@@ -54,7 +55,9 @@ contract VestingContract is
     event VestingScheduleCreated(address indexed beneficiary);
     event WithdrawalCompleted(address indexed beneficiary);
 
-    constructor() Ownable(msg.sender) {}
+    constructor(address tokenContract) Ownable(msg.sender) {
+        s_tokenContract = tokenContract;
+    }
 
     /**
      * @notice Creates a new vesting schedule for a user
@@ -81,7 +84,11 @@ contract VestingContract is
         ) revert VestingContract__InvalidVestingPeriod();
 
         // Transfer vestify tokens from caller to this contract
-        IERC20(address(0)).transferFrom(msg.sender, address(this), totalAmount);
+        IERC20(s_tokenContract).transferFrom(
+            msg.sender,
+            address(this),
+            totalAmount
+        );
 
         s_vestifyTokenBalance = s_vestifyTokenBalance + totalAmount;
 
@@ -247,7 +254,7 @@ contract VestingContract is
             .withdrawnAmount += amount;
 
         // Transfer vestify tokens from this contract to beneficiary
-        IERC20(address(0)).transfer(msg.sender, amount);
+        IERC20(s_tokenContract).transfer(msg.sender, amount);
 
         s_vestifyTokenBalance = s_vestifyTokenBalance - amount;
 

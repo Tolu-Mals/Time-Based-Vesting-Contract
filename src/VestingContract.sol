@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 
 import {Ownable} from "@openzeppelin/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/token/ERC20/utils/SafeERC20.sol";
 import {
     AutomationCompatibleInterface
 } from "@chainlink-contracts/automation/AutomationCompatible.sol";
@@ -20,6 +21,8 @@ contract VestingContract is
     AutomationCompatibleInterface,
     AutomationBase
 {
+    using SafeERC20 for IERC20;
+
     // Types
     struct VestingSchedule {
         address beneficiaryAddress;
@@ -50,6 +53,7 @@ contract VestingContract is
     error VestingContract__InsufficientFunds();
     error VestingContract__CliffPeriodNotReached();
     error VestingContract__BeneficiaryDoesNotExist();
+    error VestingContract__InvalidPerformData();
 
     //Events
     event VestingScheduleCreated(address indexed beneficiary);
@@ -85,13 +89,13 @@ contract VestingContract is
         ) revert VestingContract__InvalidVestingPeriod();
 
         // Transfer vestify tokens from caller to this contract
-        IERC20(s_tokenContract).transferFrom(
+        IERC20(s_tokenContract).safeTransferFrom(
             msg.sender,
             address(this),
             totalAmount
         );
 
-        s_vestifyTokenBalance = s_vestifyTokenBalance + totalAmount;
+        s_vestifyTokenBalance += totalAmount;
 
         uint256 amountPerDay = totalAmount /
             ((endTimestamp - startTimestamp) / ONE_DAY_IN_SECONDS);
@@ -148,9 +152,6 @@ contract VestingContract is
         }
 
         uint256[] memory idsToProcess = new uint256[](idsToProcessCount);
-        uint256[] memory newReleasedAmounts = new uint256[](idsToProcessCount);
-        uint256 LAST_PROCESSED_TIMESTAMP = block.timestamp;
-        uint256 nextIndexToProcess;
         uint256 count = 0;
 
         //Determine ids to process, and the new values for released amount and last time stamp
@@ -159,16 +160,6 @@ contract VestingContract is
             i < s_vestingScheduleList.length && count < BATCH_SIZE;
             i++
         ) {
-            // If we've exceeded batch size, keep track of where to continue
-            if (count == BATCH_SIZE - 1) {
-                nextIndexToProcess = i + 1;
-            }
-
-            //If we've run through all the schedules, reset to 0
-            if (i == s_vestingScheduleList.length - 1) {
-                nextIndexToProcess = 0;
-            }
-
             bool shouldProcessSchedule = (block.timestamp -
                 s_vestingScheduleList[i].lastTimestamp >
                 ONE_DAY_IN_SECONDS) &&
@@ -178,55 +169,55 @@ contract VestingContract is
 
             if (shouldProcessSchedule) {
                 idsToProcess[count] = i;
-                uint256 amountToRelease = s_vestingScheduleList[i].amountPerDay;
-
-                if (
-                    s_vestingScheduleList[i].releasedAmount + amountToRelease >
-                    s_vestingScheduleList[i].totalAmount
-                ) {
-                    amountToRelease =
-                        s_vestingScheduleList[i].totalAmount -
-                        s_vestingScheduleList[i].releasedAmount;
-                }
-                newReleasedAmounts[count] =
-                    s_vestingScheduleList[i].releasedAmount +
-                    amountToRelease;
-
                 count++;
             }
         }
 
         if (idsToProcess.length > 0) {
-            return (
-                true,
-                abi.encode(
-                    idsToProcess,
-                    newReleasedAmounts,
-                    nextIndexToProcess,
-                    LAST_PROCESSED_TIMESTAMP
-                )
-            );
+            return (true, abi.encode(idsToProcess));
         } else {
             return (false, "");
         }
     }
 
-    //TODO: The Docs mentioned something about any body being able to call performUpkeep, so we need to do some checks, in this case someone could change the value of s_nextIndexToProcess or idsToProcess, to get rewards faster
     function performUpkeep(bytes calldata performData) external override {
-        (
-            uint256[] memory idsToProcess,
-            uint256[] memory newReleasedAmounts,
-            uint256 nextIndexToProcess,
-            uint256 lastProcessedTimestamp
-        ) = abi.decode(performData, (uint256[], uint256[], uint256, uint256));
+        (uint256[] memory idsToProcess) = abi.decode(performData, (uint256[]));
 
         for (uint256 i = 0; i < idsToProcess.length; i++) {
             uint256 index = idsToProcess[i];
-            s_vestingScheduleList[index].releasedAmount = newReleasedAmounts[i];
-            s_vestingScheduleList[index].lastTimestamp = lastProcessedTimestamp;
+
+            bool shouldProcessSchedule = (block.timestamp -
+                s_vestingScheduleList[index].lastTimestamp >
+                ONE_DAY_IN_SECONDS) &&
+                (s_vestingScheduleList[index].releasedAmount <
+                    s_vestingScheduleList[index].totalAmount);
+
+            if (!shouldProcessSchedule) {
+                revert VestingContract__InvalidPerformData();
+            }
+
+            uint256 amountToRelease = s_vestingScheduleList[index].amountPerDay;
+
+            if (
+                s_vestingScheduleList[index].releasedAmount + amountToRelease >
+                s_vestingScheduleList[index].totalAmount
+            ) {
+                amountToRelease =
+                    s_vestingScheduleList[index].totalAmount -
+                    s_vestingScheduleList[index].releasedAmount;
+            }
+
+            s_vestingScheduleList[index].releasedAmount += amountToRelease;
+            s_vestingScheduleList[index].lastTimestamp = block.timestamp;
         }
 
-        s_nextIndexToProcess = nextIndexToProcess;
+        uint256 lastProcessedIndex = idsToProcess[idsToProcess.length - 1];
+
+        if (lastProcessedIndex == s_vestingScheduleList.length - 1) {
+            s_nextIndexToProcess = 0;
+        } else {
+            s_nextIndexToProcess = lastProcessedIndex + 1;
+        }
     }
 
     function withdrawFunds(uint256 amount) external {
@@ -255,7 +246,7 @@ contract VestingContract is
             .withdrawnAmount += amount;
 
         // Transfer vestify tokens from this contract to beneficiary
-        IERC20(s_tokenContract).transfer(msg.sender, amount);
+        IERC20(s_tokenContract).safeTransfer(msg.sender, amount);
 
         s_vestifyTokenBalance = s_vestifyTokenBalance - amount;
 

@@ -64,7 +64,7 @@ contract VestingContract is
      * @param beneficiary The address of the user receiving the vested tokens
      * @param startTimestamp The timestamp when vesting begins
      * @param endTimestamp The timestamp when vesting ends
-     * @param cliffTimestamp The timestamp before which no tokens can be released
+     * @param cliffTimestamp The timestamp before which no tokens can be withdrawn
      * @param totalAmount The total amount of tokens to be vested
      */
     function createVestingSchedule(
@@ -78,6 +78,7 @@ contract VestingContract is
             revert VestingContract__AmountNotGreaterThanZero();
 
         if (
+            startTimestamp < block.timestamp ||
             startTimestamp > cliffTimestamp ||
             cliffTimestamp > endTimestamp ||
             endTimestamp - startTimestamp < MIN_VESTING_PERIOD
@@ -126,7 +127,6 @@ contract VestingContract is
         returns (bool upkeepNeeded, bytes memory performData)
     {
         uint256 startIndex = s_nextIndexToProcess;
-        uint256 nextIndexToProcess;
         uint256 idsToProcessCount = 0;
 
         //Get count of ids that need to be processed
@@ -139,8 +139,8 @@ contract VestingContract is
                 s_vestingScheduleList[i].lastTimestamp >
                 ONE_DAY_IN_SECONDS) &&
                 (s_vestingScheduleList[i].releasedAmount <
-                    s_vestingScheduleList[i].totalAmount) &&
-                (block.timestamp < s_vestingScheduleList[i].endTimestamp);
+                    s_vestingScheduleList[i].totalAmount);
+            // (block.timestamp < s_vestingScheduleList[i].endTimestamp);
 
             if (shouldProcessSchedule) {
                 idsToProcessCount++;
@@ -150,6 +150,7 @@ contract VestingContract is
         uint256[] memory idsToProcess = new uint256[](idsToProcessCount);
         uint256[] memory newReleasedAmounts = new uint256[](idsToProcessCount);
         uint256 LAST_PROCESSED_TIMESTAMP = block.timestamp;
+        uint256 nextIndexToProcess;
         uint256 count = 0;
 
         //Determine ids to process, and the new values for released amount and last time stamp
@@ -172,8 +173,8 @@ contract VestingContract is
                 s_vestingScheduleList[i].lastTimestamp >
                 ONE_DAY_IN_SECONDS) &&
                 (s_vestingScheduleList[i].releasedAmount <
-                    s_vestingScheduleList[i].totalAmount) &&
-                (block.timestamp < s_vestingScheduleList[i].endTimestamp);
+                    s_vestingScheduleList[i].totalAmount);
+            // (block.timestamp < s_vestingScheduleList[i].endTimestamp);
 
             if (shouldProcessSchedule) {
                 idsToProcess[count] = i;

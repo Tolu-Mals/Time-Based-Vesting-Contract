@@ -1,8 +1,11 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
 import {Test} from "forge-std/Test.sol";
 import {DeployVestifyToken} from "script/DeployVestifyToken.s.sol";
-import {DeployVestifyContract} from "src/DepoyVestifyContract";
+import {DeployVestingContract} from "script/DeployVestingContract.s.sol";
 import {VestifyToken} from "src/VestifyToken.sol";
-import {VestifyContract} from "src/VestifyContract.sol";
+import {VestingContract} from "src/VestingContract.sol";
 
 contract VestingContractTest is Test {
     function setUp() external {}
@@ -11,13 +14,13 @@ contract VestingContractTest is Test {
         DeployVestifyToken vestifyTokenDeployer = new DeployVestifyToken();
         VestifyToken vestifyToken = new VestifyToken();
 
-        DeployVestifyContract vestifyContractDeployer = new DeployVestifyContract();
-        VestifyContract vestifyContract = new VestifyContract(
+        DeployVestingContract VestingContractDeployer = new DeployVestingContract();
+        VestingContract VestingContract = new VestingContract(
             address(vestifyToken)
         );
 
         assert(
-            vestifyContract.getVestifyTokenContract() == address(vestifyToken)
+            VestingContract.getVestifyTokenContract() == address(vestifyToken)
         );
     }
 }

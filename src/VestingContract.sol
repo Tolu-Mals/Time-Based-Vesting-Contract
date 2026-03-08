@@ -38,7 +38,7 @@ contract VestingContract is
 
     // State variables
     address private s_tokenContract;
-    uint256 private s_vestifyTokenBalance;
+    uint256 private s_tokenBalance;
     uint256 private s_nextIndexToProcess;
     uint256 private constant BATCH_SIZE = 10;
     uint256 private constant ONE_DAY_IN_SECONDS = 24 * 60 * 60;
@@ -95,7 +95,7 @@ contract VestingContract is
             totalAmount
         );
 
-        s_vestifyTokenBalance += totalAmount;
+        s_tokenBalance += totalAmount;
 
         uint256 amountPerDay = totalAmount /
             ((endTimestamp - startTimestamp) / ONE_DAY_IN_SECONDS);
@@ -248,12 +248,16 @@ contract VestingContract is
         // Transfer vestify tokens from this contract to beneficiary
         IERC20(s_tokenContract).safeTransfer(msg.sender, amount);
 
-        s_vestifyTokenBalance = s_vestifyTokenBalance - amount;
+        s_tokenBalance = s_tokenBalance - amount;
 
         emit WithdrawalCompleted(msg.sender);
     }
 
     function getVestifyTokenBalance() public view returns (uint256) {
-        return s_vestifyTokenBalance;
+        return s_tokenBalance;
+    }
+
+    function getVestifyTokenContract() public view returns (address) {
+        return s_tokenContract;
     }
 }

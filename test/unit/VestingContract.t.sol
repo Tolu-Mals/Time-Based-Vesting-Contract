@@ -10,6 +10,7 @@ contract VestingContractTest is Test {
     DeployVestingContract vestingContractDeployer;
     VestingContract vestingContract;
     VestifyToken vestifyToken;
+    address BENEFICIARY = makeAddr("beneficiary");
 
     function setUp() external {
         vestingContractDeployer = new DeployVestingContract();
@@ -21,4 +22,33 @@ contract VestingContractTest is Test {
             vestingContract.getVestifyTokenContract() == address(vestifyToken)
         );
     }
+
+    function testThatScheduleIsCreatedCorrectly() public {
+        uint256 startTimestamp = block.timestamp + (1 * 24 * 60 * 60); //start one day from now
+        uint256 endTimestamp = block.timestamp + (7 * 24 * 60 * 60); //start 7 days from now
+        uint256 cliffTimestamp = block.timestamp + (4 * 24 * 60 * 60); //start 4 days from now
+        uint256 totalAmount = 50e18;
+
+        vestingContract.createVestingSchedule(
+            BENEFICIARY,
+            startTimestamp,
+            endTimestamp,
+            cliffTimestamp,
+            totalAmount
+        );
+
+        VestingContract.VestingSchedule
+            memory newVestingSchedule = vestingContract.getVestingSchedule(
+                BENEFICIARY
+            );
+
+        assert(startTimestamp == newVestingSchedule.startTimestamp);
+        assert(endTimestamp == newVestingSchedule.endTimestamp);
+        assert(cliffTimestamp == newVestingSchedule.cliffTimestamp);
+        assert(totalAmount == newVestingSchedule.totalAmount);
+    }
+
+    // function testThatRevertHappensWithInvalidStartDate() public {
+
+    // }
 }

@@ -260,4 +260,26 @@ contract VestingContract is
     function getVestifyTokenContract() public view returns (address) {
         return s_tokenContract;
     }
+
+    function getVestingScheduleList()
+        public
+        view
+        returns (VestingSchedule[] memory)
+    {
+        return s_vestingScheduleList;
+    }
+
+    function getVestingSchedule(
+        address beneficiary
+    ) public view returns (VestingSchedule memory) {
+        uint256 indexPlusOne = s_beneficiaryToVestingScheduleIndexPlusOne[
+            beneficiary
+        ];
+
+        if (indexPlusOne == 0) {
+            revert VestingContract__BeneficiaryDoesNotExist();
+        }
+
+        return s_vestingScheduleList[indexPlusOne - 1];
+    }
 }

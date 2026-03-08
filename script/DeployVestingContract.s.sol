@@ -7,12 +7,17 @@ import {VestifyToken} from "src/VestifyToken.sol";
 import {DeployVestifyToken} from "script/DeployVestifyToken.s.sol";
 
 contract DeployVestingContract is Script {
-    function run(address tokenContract) public returns (VestingContract) {
+    function run()
+        public
+        returns (VestingContract vestingContract, VestifyToken vestifyToken)
+    {
         DeployVestifyToken vestifyTokenDeployer = new DeployVestifyToken();
-        VestifyToken vestifyToken = vestifyTokenDeployer.run();
+        vestifyToken = vestifyTokenDeployer.run();
 
         vm.startBroadcast();
-        new VestingContract(address(vestifyToken));
+        vestingContract = new VestingContract(address(vestifyToken));
         vm.stopBroadcast();
+
+        return (vestingContract, vestifyToken);
     }
 }

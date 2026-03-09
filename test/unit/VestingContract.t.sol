@@ -29,6 +29,7 @@ contract VestingContractTest is Test {
         uint256 cliffTimestamp = block.timestamp + (4 * 24 * 60 * 60); //start 4 days from now
         uint256 totalAmount = 50e18;
 
+        vm.prank(DEFAULT_SENDER);
         vestingContract.createVestingSchedule(
             BENEFICIARY,
             startTimestamp,

@@ -122,7 +122,6 @@ contract VestingContract is
 
     function checkUpkeep(
         bytes calldata
-        // checkData
     )
         external
         view
@@ -139,9 +138,10 @@ contract VestingContract is
             i < s_vestingScheduleList.length && idsToProcessCount < BATCH_SIZE;
             i++
         ) {
-            bool shouldProcessSchedule = (block.timestamp -
-                s_vestingScheduleList[i].lastTimestamp >
-                ONE_DAY_IN_SECONDS) &&
+            bool shouldProcessSchedule = (block.timestamp >
+                s_vestingScheduleList[i].lastTimestamp) &&
+                (block.timestamp - s_vestingScheduleList[i].lastTimestamp >
+                    ONE_DAY_IN_SECONDS) &&
                 (s_vestingScheduleList[i].releasedAmount <
                     s_vestingScheduleList[i].totalAmount);
             // (block.timestamp < s_vestingScheduleList[i].endTimestamp);
@@ -160,9 +160,10 @@ contract VestingContract is
             i < s_vestingScheduleList.length && count < BATCH_SIZE;
             i++
         ) {
-            bool shouldProcessSchedule = (block.timestamp -
-                s_vestingScheduleList[i].lastTimestamp >
-                ONE_DAY_IN_SECONDS) &&
+            bool shouldProcessSchedule = (block.timestamp >
+                s_vestingScheduleList[i].lastTimestamp) &&
+                (block.timestamp - s_vestingScheduleList[i].lastTimestamp >
+                    ONE_DAY_IN_SECONDS) &&
                 (s_vestingScheduleList[i].releasedAmount <
                     s_vestingScheduleList[i].totalAmount);
             // (block.timestamp < s_vestingScheduleList[i].endTimestamp);
@@ -186,9 +187,11 @@ contract VestingContract is
         for (uint256 i = 0; i < idsToProcess.length; i++) {
             uint256 index = idsToProcess[i];
 
-            bool shouldProcessSchedule = (block.timestamp -
-                s_vestingScheduleList[index].lastTimestamp >
-                ONE_DAY_IN_SECONDS) &&
+            bool shouldProcessSchedule = (block.timestamp >
+                s_vestingScheduleList[index].lastTimestamp) &&
+                (block.timestamp -
+                    s_vestingScheduleList[index].lastTimestamp >
+                    ONE_DAY_IN_SECONDS) &&
                 (s_vestingScheduleList[index].releasedAmount <
                     s_vestingScheduleList[index].totalAmount);
 

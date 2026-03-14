@@ -51,10 +51,13 @@ contract VestingContractTest is Test {
         assert(totalAmount == newVestingSchedule.totalAmount);
     }
 
-    function testThatRevertHappensWithInvalidStartDate() public {
+    modifier timePassed() {
         vm.warp(10 days);
         vm.roll(block.number + 5);
+        _;
+    }
 
+    function testThatRevertHappensWithInvalidStartDate() public timePassed {
         vm.startPrank(DEFAULT_SENDER);
 
         uint256 startTimestamp = block.timestamp - (1 * 24 * 60 * 60); //start one day ago
@@ -77,10 +80,7 @@ contract VestingContractTest is Test {
         vm.stopPrank();
     }
 
-    function testThatRevertHappensWithInvalidEndDate() public {
-        vm.warp(10 days);
-        vm.roll(block.number + 5);
-
+    function testThatRevertHappensWithInvalidEndDate() public timePassed {
         vm.startPrank(DEFAULT_SENDER);
 
         uint256 startTimestamp = block.timestamp - (1 * 24 * 60 * 60); //start one day ago
@@ -103,10 +103,7 @@ contract VestingContractTest is Test {
         vm.stopPrank();
     }
 
-    function testThatRevertHappensWithInvalidCliffDate() public {
-        vm.warp(10 days);
-        vm.roll(block.number + 5);
-
+    function testThatRevertHappensWithInvalidCliffDate() public timePassed {
         vm.startPrank(DEFAULT_SENDER);
 
         uint256 startTimestamp = block.timestamp - (1 * 24 * 60 * 60); //start one day ago
@@ -129,10 +126,10 @@ contract VestingContractTest is Test {
         vm.stopPrank();
     }
 
-    function testThatRevertHappensWithInvalidVestingDuration() public {
-        vm.warp(10 days);
-        vm.roll(block.number + 5);
-
+    function testThatRevertHappensWithInvalidVestingDuration()
+        public
+        timePassed
+    {
         vm.startPrank(DEFAULT_SENDER);
 
         uint256 startTimestamp = block.timestamp - (1 * 24 * 60 * 60); //start one day ago
@@ -153,5 +150,58 @@ contract VestingContractTest is Test {
             totalAmount
         );
         vm.stopPrank();
+    }
+
+    function testThatCheckupkeepReturnsFalseBeforeCliff() public {
+        uint256 startTimestamp = block.timestamp + (1 * 24 * 60 * 60); //start one day from now
+        uint256 endTimestamp = block.timestamp + (14 * 24 * 60 * 60); //end 14 days from now
+        uint256 cliffTimestamp = block.timestamp + (4 * 24 * 60 * 60); //start 4 days from now
+        uint256 totalAmount = 50e18;
+
+        vm.startPrank(DEFAULT_SENDER);
+        vestifyToken.approve(address(vestingContract), totalAmount);
+        vestingContract.createVestingSchedule(
+            BENEFICIARY,
+            startTimestamp,
+            endTimestamp,
+            cliffTimestamp,
+            totalAmount
+        );
+        vm.stopPrank();
+
+        vm.prank(address(0), address(0));
+        (bool checkUpkeep, ) = vestingContract.checkUpkeep("");
+
+        assert(checkUpkeep == false);
+    }
+
+    modifier timePassedCliff() {
+        vm.warp(10 days);
+        vm.roll(block.number + 5);
+        _;
+    }
+
+    function testThatCheckupkeepReturnsTrueAfterCliff() public timePassedCliff {
+        uint256 startTimestamp = block.timestamp + (1 * 24 * 60 * 60); //start one day from now
+        uint256 endTimestamp = block.timestamp + (14 * 24 * 60 * 60); //end 14 days from now
+        uint256 cliffTimestamp = block.timestamp + (4 * 24 * 60 * 60); //start 4 days from now
+        uint256 totalAmount = 50e18;
+
+        vm.startPrank(DEFAULT_SENDER);
+        vestifyToken.approve(address(vestingContract), totalAmount);
+        vestingContract.createVestingSchedule(
+            BENEFICIARY,
+            startTimestamp,
+            endTimestamp,
+            cliffTimestamp,
+            totalAmount
+        );
+        vm.stopPrank();
+        vm.warp(block.timestamp + 5 days);
+
+        vm.prank(address(0), address(0));
+        (bool checkUpkeep, ) = vestingContract.checkUpkeep("");
+
+        assert(checkUpkeep == true);
     }
 }
